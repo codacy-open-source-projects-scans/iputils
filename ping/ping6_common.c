@@ -182,6 +182,10 @@ int ping6_run(struct ping_rts *rts, int argc, char **argv, struct addrinfo *ai,
 			disable_capability_raw();
 		}
 
+		if (rts->tclass &&
+		    setsockopt(probe_fd, IPPROTO_IPV6, IPV6_TCLASS, &rts->tclass, sizeof (rts->tclass)) <0)
+			error(2, errno, "setsockopt(IPV6_TCLASS)");
+
 		if (!IN6_IS_ADDR_LINKLOCAL(&rts->firsthop.sin6_addr) &&
 		    !IN6_IS_ADDR_MC_LINKLOCAL(&rts->firsthop.sin6_addr))
 			rts->firsthop.sin6_family = AF_INET6;
@@ -367,15 +371,6 @@ int ping6_run(struct ping_rts *rts, int argc, char **argv, struct addrinfo *ai,
 #endif
 	   )
 		error(2, errno, _("can't receive hop limit"));
-
-	if (rts->opt_tclass) {
-#ifdef IPV6_TCLASS
-		if (setsockopt(sock->fd, IPPROTO_IPV6, IPV6_TCLASS, &rts->tclass, sizeof rts->tclass) == -1)
-			error(2, errno, _("setsockopt(IPV6_TCLASS)"));
-#else
-		error(0, 0, _("traffic class is not supported"));
-#endif
-	}
 
 	if (rts->opt_flowinfo) {
 		char freq_buf[CMSG_ALIGN(sizeof(struct in6_flowlabel_req)) + rts->cmsglen];
