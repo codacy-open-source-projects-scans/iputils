@@ -787,8 +787,17 @@ int ping4_run(struct ping_rts *rts, int argc, char **argv, struct addrinfo *ai,
 
 			memcpy(&rts->whereto, result->ai_addr, sizeof rts->whereto);
 			memset(hnamebuf, 0, sizeof hnamebuf);
+
+			/*
+			 * On certain network setup getaddrinfo() can return empty
+			 * ai_canonname. Instead of printing nothing in "PING"
+			 * line use the target.
+			 */
 			if (result->ai_canonname)
 				strncpy(hnamebuf, result->ai_canonname, sizeof hnamebuf - 1);
+			else
+				strncpy(hnamebuf, target, sizeof hnamebuf - 1);
+
 			rts->hostname = hnamebuf;
 
 			if (argc > 1)
@@ -877,12 +886,17 @@ int ping4_run(struct ping_rts *rts, int argc, char **argv, struct addrinfo *ai,
 
 	if (rts->broadcast_pings || IN_MULTICAST(ntohl(rts->whereto.sin_addr.s_addr))) {
 		rts->multicast = 1;
+
 		if (rts->uid) {
-			if (rts->interval < 1000)
-				error(2, 0, _("broadcast ping with too short interval: %d"), rts->interval);
+			if (rts->interval < MIN_MULTICAST_USER_INTERVAL_MS)
+				error(2, 0, _("minimal interval for broadcast ping for user must be >= %d ms, use -i %s (or higher)"),
+					  MIN_MULTICAST_USER_INTERVAL_MS,
+					  str_interval(MIN_MULTICAST_USER_INTERVAL_MS));
+
 			if (rts->pmtudisc >= 0 && rts->pmtudisc != IP_PMTUDISC_DO)
 				error(2, 0, _("broadcast ping does not fragment"));
 		}
+
 		if (rts->pmtudisc < 0)
 			rts->pmtudisc = IP_PMTUDISC_DO;
 	}

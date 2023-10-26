@@ -24,11 +24,15 @@ xml:id="man.ping">
     <cmdsynopsis sepchar=" ">
       <command>ping</command>
       <arg choice="opt" rep="norepeat">
-        <option>-aAbBdCDefhLnOqrRUvV46</option>
+        <option>-aAbBdCDfhLnOqrRUvV46</option>
       </arg>
       <arg choice="opt" rep="norepeat">
         <option>-c
         <replaceable>count</replaceable></option>
+      </arg>
+      <arg choice="opt" rep="norepeat">
+        <option>-e
+        <replaceable>identifier</replaceable></option>
       </arg>
       <arg choice="opt" rep="norepeat">
         <option>-F
@@ -214,7 +218,17 @@ xml:id="man.ping">
       </varlistentry>
       <varlistentry>
         <term>
+          <option>-D</option>
+        </term>
+        <listitem>
+          <para>Print timestamp (unix time + microseconds as in
+          gettimeofday) before each line.</para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>
           <option>-e</option>
+          <emphasis remap="I">identifier</emphasis>
         </term>
         <listitem>
           <para>Set the identification field of ECHO_REQUEST.
@@ -222,15 +236,6 @@ xml:id="man.ping">
           (not supported on <emphasis remap="I">ICMP datagram socket</emphasis>).
           The value of the field may be printed with <option>-v</option> option.
           </para>
-        </listitem>
-      </varlistentry>
-      <varlistentry>
-        <term>
-          <option>-D</option>
-        </term>
-        <listitem>
-          <para>Print timestamp (unix time + microseconds as in
-          gettimeofday) before each line.</para>
         </listitem>
       </varlistentry>
       <varlistentry>
@@ -280,7 +285,8 @@ xml:id="man.ping">
           The default is to wait for one second between each packet
           normally, or not to wait in flood mode.
           Only super-user may set interval to values
-          less than 2 ms.</para>
+          less than 2 ms. Broadcast and multicast ping have even
+          higher limitation for regular user: minimum is 1 sec.</para>
         </listitem>
       </varlistentry>
       <varlistentry>
