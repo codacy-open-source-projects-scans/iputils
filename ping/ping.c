@@ -363,7 +363,7 @@ main(int argc, char **argv)
 		hints.ai_family = AF_INET6;
 
 	/* Parse command line options */
-	while ((ch = getopt(argc, argv, "h?" "4bRT:" "6F:N:" "aABc:CdDe:fi:I:l:Lm:M:nOp:qQ:rs:S:t:UvVw:W:")) != EOF) {
+	while ((ch = getopt(argc, argv, "h?" "4bRT:" "6F:N:" "aABc:CdDe:fHi:I:l:Lm:M:nOp:qQ:rs:S:t:UvVw:W:")) != EOF) {
 		switch(ch) {
 		/* IPv4 specific options */
 		case '4':
@@ -433,6 +433,9 @@ main(int argc, char **argv)
 		case 'D':
 			rts.opt_ptimeofday = 1;
 			break;
+		case 'H':
+			rts.opt_force_lookup = 1;
+			break;
 		case 'i':
 		{
 			double optval;
@@ -496,6 +499,7 @@ main(int argc, char **argv)
 			break;
 		case 'n':
 			rts.opt_numeric = 1;
+			rts.opt_force_lookup = 0;
 			break;
 		case 'O':
 			rts.opt_outstanding = 1;
@@ -568,8 +572,6 @@ main(int argc, char **argv)
 
 	if (!argc)
 		error(1, EDESTADDRREQ, "usage error");
-
-	iputils_srand();
 
 	target = argv[argc - 1];
 
@@ -1527,7 +1529,7 @@ in_cksum(const unsigned short *addr, int len, unsigned short csum)
 /*
  * pinger --
  * 	Compose and transmit an ICMP ECHO REQUEST packet.  The IP packet
- * will be added on by the kernel.  The ID field is a random number,
+ * will be added on by the kernel.  The ID field is our UNIX process ID,
  * and the sequence number is an ascending integer.  The first several bytes
  * of the data portion are used to hold a UNIX "timeval" struct in VAX
  * byte-order, to compute the round-trip time.
@@ -1768,12 +1770,11 @@ char *pr_raw_addr(struct ping_rts *rts, void *sa, socklen_t salen)
 char *_pr_addr(struct ping_rts *rts, void *sa, socklen_t salen, int resolve_name)
 {
 	static char buffer[4096] = "";
-	static struct sockaddr_storage last_sa;
+	static struct sockaddr_storage last_sa = {0};
 	static socklen_t last_salen = 0;
 	char name[NI_MAXHOST] = "";
 	char address[NI_MAXHOST] = "";
 
-	memset(&last_sa, 0, sizeof(last_sa));
 	if (salen == last_salen && !memcmp(sa, &last_sa, salen))
 		return buffer;
 
@@ -1782,7 +1783,7 @@ char *_pr_addr(struct ping_rts *rts, void *sa, socklen_t salen, int resolve_name
 	rts->in_pr_addr = !setjmp(rts->pr_addr_jmp);
 
 	getnameinfo(sa, salen, address, sizeof address, NULL, 0, getnameinfo_flags | NI_NUMERICHOST);
-	if (!rts->exiting && resolve_name && !rts->opt_numeric)
+	if (!rts->exiting && resolve_name && (rts->opt_force_lookup || !rts->opt_numeric))
 		getnameinfo(sa, salen, name, sizeof name, NULL, 0, getnameinfo_flags);
 
 	if (*name && strncmp(name, address, NI_MAXHOST))

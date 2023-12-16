@@ -49,7 +49,7 @@ void usage(void)
 		"\nUsage\n"
 		"  ping [options] <destination>\n"
 		"\nOptions:\n"
-		"  <destination>      dns name or ip address\n"
+		"  <destination>      DNS name or ip address\n"
 		"  -a                 use audible ping\n"
 		"  -A                 use adaptive ping\n"
 		"  -B                 sticky source address\n"
@@ -62,13 +62,15 @@ void usage(void)
 		"                     Imply using SOCK_RAW (for IPv4 only for identifier 0)\n"
 		"  -f                 flood ping\n"
 		"  -h                 print help and exit\n"
+		"  -H                 force reverse DNS name resolution (useful for numeric\n"
+		"                     destinations or for -f), override -n\n"
 		"  -I <interface>     either interface name or address\n"
 		"  -i <interval>      seconds between sending each packet\n"
 		"  -L                 suppress loopback of multicast packets\n"
 		"  -l <preload>       send <preload> number of packages while waiting replies\n"
 		"  -m <mark>          tag the packets going out\n"
 		"  -M <pmtud opt>     define mtu discovery, can be one of <do|dont|want|probe>\n"
-		"  -n                 no dns name resolution\n"
+		"  -n                 no reverse DNS name resolution, override -H\n"
 		"  -O                 report outstanding replies\n"
 		"  -p <pattern>       contents of padding byte\n"
 		"  -q                 quiet output\n"
@@ -303,7 +305,7 @@ void print_timestamp(struct ping_rts *rts)
 /*
  * pinger --
  * 	Compose and transmit an ICMP ECHO REQUEST packet.  The IP packet
- * will be added on by the kernel.  The ID field is a random number,
+ * will be added on by the kernel.  The ID field is our UNIX process ID,
  * and the sequence number is an ascending integer.  The first several bytes
  * of the data portion are used to hold a UNIX "timeval" struct in VAX
  * byte-order, to compute the round-trip time.
@@ -319,7 +321,7 @@ int pinger(struct ping_rts *rts, ping_func_set_st *fset, socket_st *sock)
 		return 1000;
 
 	/* Check that packets < rate*time + preload */
-	if (rts->cur_time.tv_sec == 0) {
+	if (rts->cur_time.tv_sec == 0 && rts->cur_time.tv_nsec == 0) {
 		clock_gettime(CLOCK_MONOTONIC_RAW, &rts->cur_time);
 		tokens = rts->interval * (rts->preload - 1);
 	} else {
@@ -536,7 +538,7 @@ void setup(struct ping_rts *rts, socket_st *sock)
 	}
 
 	if (sock->socktype == SOCK_RAW && rts->ident == -1)
-		rts->ident = rand() & IDENTIFIER_MAX;
+		rts->ident = htons(getpid() & 0xFFFF);
 
 	set_signal(SIGINT, sigexit);
 	set_signal(SIGALRM, sigexit);

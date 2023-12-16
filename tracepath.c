@@ -11,6 +11,7 @@
 
 #define _GNU_SOURCE
 
+#include <assert.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <limits.h>
@@ -192,7 +193,7 @@ static int recverr(struct run_state *const ctl)
 		ctl->his[slot].hops = 0;
 	}
 	if (recv_size == sizeof(rcvbuf)) {
-		if (rcvbuf.ttl == 0 || rcvbuf.ts.tv_sec == 0)
+		if (rcvbuf.ttl == 0 || (rcvbuf.ts.tv_sec == 0 && rcvbuf.ts.tv_nsec == 0))
 			broken_router = 1;
 		else {
 			sndhops = rcvbuf.ttl;
@@ -510,6 +511,7 @@ int main(int argc, char **argv)
 	}
 
 	for (ctl.ai = result; ctl.ai; ctl.ai = ctl.ai->ai_next) {
+		assert(ctl.ai != NULL);
 		if (ctl.ai->ai_family != AF_INET6 && ctl.ai->ai_family != AF_INET)
 			continue;
 		ctl.socket_fd = socket(ctl.ai->ai_family, ctl.ai->ai_socktype, ctl.ai->ai_protocol);
