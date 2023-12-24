@@ -99,7 +99,7 @@ xml:id="man.ping">
     </cmdsynopsis>
   </refsynopsisdiv>
 
-  <refsection>
+  <refsection xml:id="description">
     <info>
       <title>DESCRIPTION</title>
     </info>
@@ -122,7 +122,7 @@ xml:id="man.ping">
     IPv6 source routing was deprecated (RFC5095).</para>
   </refsection>
 
-  <refsection>
+  <refsection xml:id="options">
     <info>
       <title>OPTIONS</title>
     </info>
@@ -159,8 +159,9 @@ xml:id="man.ping">
           <para>Adaptive ping. Interpacket interval adapts to
           round-trip time, so that effectively not more than one
           (or more, if preload is set) unanswered probe is present
-          in the network. Minimal interval is 200msec unless
-          super-user. On networks with low RTT this mode is
+          in the network. The default interval is 2 ms,
+          for more info see option <option>-i</option>.
+          On networks with low RTT this mode is
           essentially equivalent to flood mode.</para>
         </listitem>
       </varlistentry>
@@ -385,7 +386,7 @@ xml:id="man.ping">
           <emphasis remap="I">nodeinfo_option</emphasis>
         </term>
         <listitem>
-          <para>IPv6 only. Send ICMPv6 Node Information Queries
+          <para>IPv6 only. Send IPv6 Node Information Queries
           (RFC4620), instead of Echo Request. CAP_NET_RAW
           capability is required.</para>
           <variablelist remap="TP">
@@ -756,6 +757,17 @@ xml:id="man.ping">
     brief summary is displayed. Shorter current statistics can be
     obtained without termination of process with signal
     SIGQUIT.</para>
+    <para>This program is intended for use in network testing,
+    measurement and management. Because of the load it can impose
+    on the network, it is unwise to use
+    <command>ping</command> during normal operations or from
+    automated scripts.</para>
+  </refsection>
+
+  <refsection xml:id="exit_status">
+    <info>
+      <title>EXIT STATUS</title>
+    </info>
     <para>If
     <command>ping</command> does not receive any reply packets at
     all it will exit with code 1. If a packet
@@ -768,14 +780,9 @@ xml:id="man.ping">
     also exit with code 1. On other error it exits with code 2.
     Otherwise it exits with code 0. This makes it possible to use
     the exit code to see if a host is alive or not.</para>
-    <para>This program is intended for use in network testing,
-    measurement and management. Because of the load it can impose
-    on the network, it is unwise to use
-    <command>ping</command> during normal operations or from
-    automated scripts.</para>
   </refsection>
 
-  <refsection>
+  <refsection xml:id="ipv6_link_local_destinations">
     <info>
       <title>IPV6 LINK-LOCAL DESTINATIONS</title>
     </info>
