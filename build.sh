@@ -1,13 +1,13 @@
-#!/bin/sh
-# Copyright (c) 2019-2021 Petr Vorel <pvorel@suse.cz>
+#!/bin/sh -eux
+# Copyright (c) 2019-2024 Petr Vorel <pvorel@suse.cz>
 
 CFLAGS="${CFLAGS:--Wformat -Werror=format-security -Werror=implicit-function-declaration -Werror=return-type -fno-common}"
 CC="${CC:-gcc}"
 BUILD_DIR="${BUILD_DIR:-builddir}"
 PREFIX="${PREFIX:-$HOME/iputils-install}"
 
+[ -z "${EXTRA_BUILD_OPTS:-}" ] && EXTRA_BUILD_OPTS="-DBUILD_HTML_MANS=true"
 BUILD_OPTS="-Dprefix=$PREFIX $EXTRA_BUILD_OPTS"
-[ -z "$EXTRA_BUILD_OPTS" ] && BUILD_OPTS="$BUILD_OPTS -DBUILD_HTML_MANS=true"
 [ -f "meson.cross" ] && BUILD_OPTS="--cross-file $PWD/meson.cross $BUILD_OPTS"
 
 # NOTE: meson iself checkes for minimal version
@@ -77,6 +77,22 @@ install()
 	run "make install"
 }
 
+dist()
+{
+	local formats="xztar,gztar,zip"
+	local f
+
+	echo "=== dist ($formats) ==="
+	run "meson dist -C $BUILD_DIR --formats $formats"
+
+	for f in $(echo "$formats" | sed 's/,/ /g'); do
+		f=$(echo "$f" | sed 's/\(.*\)tar/tar.\1/')
+		f=$BUILD_DIR/meson-dist/iputils-20240117.$f
+		ls -lah $f
+		file $f | grep -E '(compressed|archive) data'
+	done
+}
+
 run_tests()
 {
 	local ret
@@ -110,8 +126,8 @@ print_log()
 cd `dirname $0`
 
 cmd=
-case "$1" in
-	dependencies|info|configure|build|build-log|install|install-log|test|test-log|"") cmd="$1";;
+case "${1:-}" in
+	build|build-log|configure|dependencies|dist|info|install|install-log|test|test-log|"") cmd="${1:-}";;
 	*) echo "ERROR: wrong command '$1'" >&2; exit 1;;
 esac
 
@@ -137,6 +153,10 @@ fi
 
 if [ -z "$cmd" -o "$cmd" = "install" ]; then
 	install
+fi
+
+if [ -z "$cmd" -o "$cmd" = "dist" ]; then
+	dist
 fi
 
 if [ "$cmd" = "install-log" ]; then
