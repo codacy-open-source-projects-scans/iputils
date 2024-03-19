@@ -1,4 +1,5 @@
-# Copyright (c) Iputils Project, 2017-2021
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (c) Iputils Project, 2017-2024
 
 project('iputils', 'c',
 	default_options : [
@@ -6,7 +7,7 @@ project('iputils', 'c',
 		'warning_level=3',
 		'localstatedir=var',
 	],
-	meson_version : '>=0.40',
+	meson_version : '>=0.44', # >=0.58 is required for 'meson dist'
 	version : '20240117') # keep in sync with: git describe | awk -F- '{print $1}'
 
 cc = meson.get_compiler('c')
@@ -220,6 +221,10 @@ endif
 
 if build_mans == true or build_html_mans == true
 	subdir ('doc')
+
+	if meson.version().version_compare('>=0.48.0')
+		meson.add_dist_script('build-aux/meson-build-dist-man.sh')
+	endif
 endif
 
 if run_tests
