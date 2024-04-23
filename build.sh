@@ -10,6 +10,8 @@ PREFIX="${PREFIX:-$HOME/iputils-install}"
 BUILD_OPTS="-Dprefix=$PREFIX $EXTRA_BUILD_OPTS"
 [ -f "meson.cross" ] && BUILD_OPTS="--cross-file $PWD/meson.cross $BUILD_OPTS"
 
+BINARIES='arping clockdiff ping/ping tracepath'
+
 # NOTE: meson iself checkes for minimal version
 # see meson_version in meson.build, it fails if not required
 # Meson version is 0.37.1 but project requires >=0.40.
@@ -41,40 +43,91 @@ print_versions()
 	ninja --version
 }
 
-run()
+configure_32()
 {
-	local ret
+	echo "=== configure_32 ==="
 
-	eval "$@"
-	ret=$?
+	local arch="$(uname -m)"
+	local dir
 
-	if [ $ret -ne 0 ]; then
-		echo "ERROR: '$@' failed, exit code: $ret" >&2
-		exit $ret
+	CFLAGS="-m32 $CFLAGS"
+
+	if [ -z "${PKG_CONFIG_LIBDIR:-}" ]; then
+		if [ "$arch" != "x86_64" ]; then
+			echo "ERROR: auto-detection not supported platform $arch, export PKG_CONFIG_LIBDIR!"
+			exit 1
+		fi
+
+		for dir in /usr/lib/i386-linux-gnu/pkgconfig \
+			/usr/lib32/pkgconfig /usr/lib/pkgconfig; do
+			if [ -d "$dir" ]; then
+				PKG_CONFIG_LIBDIR="$dir"
+				break
+			fi
+		done
+		if [ -z "$PKG_CONFIG_LIBDIR" ]; then
+			echo "WARNING: PKG_CONFIG_LIBDIR not found, build might fail"
+		fi
+		export PKG_CONFIG_LIBDIR
 	fi
 }
 
 configure()
 {
+	if [ "${BUILD_32:-}" ]; then
+		configure_32
+	fi
+
 	echo "=== configure ==="
 	echo "Build options: $BUILD_OPTS"
 	echo "CFLAGS: $CFLAGS"
 
 	export CFLAGS
 
-	run "meson setup $BUILD_DIR $BUILD_OPTS"
+	meson setup $BUILD_DIR $BUILD_OPTS
 }
 
 build()
 {
 	echo "=== build ==="
-	run "make -j$(getconf _NPROCESSORS_ONLN)"
+	make -j$(getconf _NPROCESSORS_ONLN)
+}
+
+check_binaries()
+{
+
+	echo "=== check_binaries ==="
+
+	local arch i
+	local bits="64"
+
+	case "${ARCH:-}" in
+		'') arch='x86-64';;
+		arm64) arch='aarch64';;
+		ppc64el) arch='PowerPC';;
+		s390x) arch='S/390';;
+	esac
+
+	if [ "${BUILD_32:-}" ]; then
+		bits=32
+		arch='80386'
+	fi
+
+	for i in $BINARIES; do
+		if echo "$EXTRA_BUILD_OPTS" | grep -i -q -- "-DBUILD_${i}=false"; then
+			echo "$i should not be build"
+			[ ! -x "$BUILD_DIR/$i" ]
+			continue
+		fi
+		[ -x "$BUILD_DIR/$i" ]
+		file "$BUILD_DIR/$i" | grep -E "$i.*${bits}-bit .*(executable|shared object).*$arch.*dynamically linked"
+	done
 }
 
 install()
 {
 	echo "=== install ==="
-	run "make install"
+	make install
 }
 
 dist()
@@ -83,7 +136,7 @@ dist()
 	local f
 
 	echo "=== dist ($formats) ==="
-	run "meson dist -C $BUILD_DIR --formats $formats"
+	meson dist -C $BUILD_DIR --formats $formats
 
 	for f in $(echo "$formats" | sed 's/,/ /g'); do
 		f=$(echo "$f" | sed 's/\(.*\)tar/tar.\1/')
@@ -127,7 +180,7 @@ cd `dirname $0`
 
 cmd=
 case "${1:-}" in
-	build|build-log|configure|dependencies|dist|info|install|install-log|test|test-log|"") cmd="${1:-}";;
+	build|build-log|check-binaries|configure|dependencies|dist|info|install|install-log|test|test-log|"") cmd="${1:-}";;
 	*) echo "ERROR: wrong command '$1'" >&2; exit 1;;
 esac
 
@@ -145,6 +198,10 @@ fi
 
 if [ -z "$cmd" -o "$cmd" = "build" ]; then
 	build
+fi
+
+if [ -z "$cmd" -o "$cmd" = "check-binaries" ]; then
+	check_binaries
 fi
 
 if [ "$cmd" = "build-log" ]; then
