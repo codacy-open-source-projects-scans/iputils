@@ -288,7 +288,10 @@ xml:id="man.ping">
         <listitem>
           <para>Force DNS name resolution for the output. Useful for numeric
           destination, or <option>-f</option> option, which by default do not
-          perform it. Override previously defined <option>-n</option> option.
+          perform it. It can also help to workaround DNS resolution problems.
+          Override previously defined <option>-n</option> option.
+          See also <emphasis remap="I">IPUTILS_PING_PTR_LOOKUP</emphasis>
+          environment variable.
           </para>
         </listitem>
       </varlistentry>
@@ -552,6 +555,8 @@ xml:id="man.ping">
           symbolic names for host addresses (no reverse DNS resolution).
           This is the default for numeric destination or <option>-f</option>
           option.  Override previously defined <option>-H</option> option.
+          See also <emphasis remap="I">IPUTILS_PING_PTR_LOOKUP</emphasis>
+          environment variable.
           </para>
         </listitem>
       </varlistentry>
@@ -645,8 +650,12 @@ xml:id="man.ping">
         <listitem>
           <para>Specifies the number of data bytes to be sent. The
           default is 56, which translates into 64 ICMP data bytes
-          when combined with the 8 bytes of ICMP header
-          data.</para>
+          when combined with the 8 bytes of ICMP header data.
+          The maximum allowed value is 65507 for IPv4
+          (65467 when <option>-R</option> or <option>-T</option>
+          or Intermediate <emphasis remap="I">hop</emphasis>s)
+          or 65527 for IPv6, but most systems
+          limit this to a smaller, system-dependent number.</para>
         </listitem>
       </varlistentry>
       <varlistentry>
@@ -775,6 +784,15 @@ xml:id="man.ping">
     on the network, it is unwise to use
     <command>ping</command> during normal operations or from
     automated scripts.</para>
+  </refsection>
+
+  <refsection xml:id="environment">
+    <info>
+      <title>ENVIRONMENT</title>
+    </info>
+	<emphasis remap="I">IPUTILS_PING_PTR_LOOKUP</emphasis> environment
+	variable set to 0 disable reverse DNS resolution (PTR lookup) by default.
+	It will be overrided by <option>-H</option> or <option>-n</option> option.
   </refsection>
 
   <refsection xml:id="exit_status">

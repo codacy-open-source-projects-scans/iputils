@@ -109,7 +109,7 @@ int ping6_run(struct ping_rts *rts, int argc, char **argv, struct addrinfo *ai,
 	unsigned char *packet;
 	char *target;
 	struct icmp6_filter filter;
-	int err;
+	int err, ret;
 	static uint32_t scope_id = 0;
 
 	if (niquery_is_enabled(&rts->ni)) {
@@ -404,15 +404,16 @@ int ping6_run(struct ping_rts *rts, int argc, char **argv, struct addrinfo *ai,
 		printf(_("from %s %s: "), pr_addr(rts, &rts->source6, sizeof rts->source6), rts->device ? rts->device : "");
 		rts->opt_numeric = saved_opt_numeric;
 	}
-	printf(_("%zu data bytes\n"), rts->datalen);
+	printf(_("%d data bytes\n"), rts->datalen);
 
 	setup(rts, sock);
 
 	drop_capabilities();
 
-	hold = main_loop(rts, &ping6_func_set, sock, packet, packlen);
+	ret = main_loop(rts, &ping6_func_set, sock, packet, packlen);
 	free(packet);
-	return hold;
+
+	return ret;
 }
 
 int print_icmp(uint8_t type, uint8_t code, uint32_t info)

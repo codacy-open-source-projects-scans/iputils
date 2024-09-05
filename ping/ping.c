@@ -59,6 +59,7 @@
 #include <ifaddrs.h>
 #include <math.h>
 #include <locale.h>
+#include <sys/param.h>
 
 /* FIXME: global_rts will be removed in future */
 struct ping_rts *global_rts;
@@ -83,6 +84,12 @@ ping_func_set_st ping4_func_set = {
 #define	MAXICMPLEN	76
 #define	NROUTES		9		/* number of record route slots */
 #define TOS_MAX		255		/* 8-bit TOS field */
+
+/* max. IPv4 packet size - IPv4 header size - ICMP header size */
+#define ICMP_MAX_DATALEN (MAXPACKET - 20 - 8)
+
+/* max. IPv6 payload size - ICMPv6 Echo Reply Header */
+#define ICMPV6_MAX_DATALEN (MAXPACKET - sizeof (struct icmp6_hdr))
 
 #define CASE_TYPE(x) case x: return #x;
 
@@ -112,6 +119,14 @@ static char *str_socktype(int socktype)
 	}
 
 	return "";
+}
+
+static int get_ipv4_optlen(struct ping_rts *rts)
+{
+	if (rts->opt_rroute || rts->opt_timestamp || rts->opt_sourceroute)
+		return 40;
+
+	return 0;
 }
 
 static void create_socket(struct ping_rts *rts, socket_st *sock, int family,
@@ -317,7 +332,6 @@ main(int argc, char **argv)
 	socket_st sock4 = { .fd = -1 };
 	socket_st sock6 = { .fd = -1 };
 	char *target;
-	char *outpack_fill = NULL;
 	static struct ping_rts rts = {
 		.interval = 1000,
 		.preload = 1,
@@ -338,6 +352,8 @@ main(int argc, char **argv)
 		.ni.query = -1,
 		.ni.subject_type = -1,
 	};
+	unsigned char buf[sizeof(struct in6_addr)];
+
 	/* FIXME: global_rts will be removed in future */
 	global_rts = &rts;
 
@@ -361,6 +377,17 @@ main(int argc, char **argv)
 		hints.ai_family = AF_INET;
 	else if (argv[0][strlen(argv[0]) - 1] == '6')
 		hints.ai_family = AF_INET6;
+
+	/*
+	 * Optionally disable reverse DNS resolution (PTR lookup) by default.
+	 * -n/-H override the variable. Warn below if disabled due this.
+	 */
+	char *env = getenv("IPUTILS_PING_PTR_LOOKUP");
+	int force_numeric = 0;
+	if (env && !strcmp(env, "0")) {
+		rts.opt_numeric = 1;
+		force_numeric = 1;
+	}
 
 	/* Parse command line options */
 	while ((ch = getopt(argc, argv, "h?" "4bRT:" "6F:N:" "3aABc:CdDe:fHi:I:l:Lm:M:nOp:qQ:rs:S:t:UvVw:W:")) != EOF) {
@@ -515,10 +542,7 @@ main(int argc, char **argv)
 			break;
 		case 'p':
 			rts.opt_pingfilled = 1;
-			free(outpack_fill);
-			outpack_fill = strdup(optarg);
-			if (!outpack_fill)
-				error(2, errno, _("memory allocation failed"));
+			fill(&rts, optarg, rts.outpack, sizeof(rts.outpack));
 			break;
 		case 'q':
 			rts.opt_quiet = 1;
@@ -531,6 +555,7 @@ main(int argc, char **argv)
 			rts.opt_so_dontroute = 1;
 			break;
 		case 's':
+			/* real validation is done later */
 			rts.datalen = strtol_or_err(optarg, _("invalid argument"), 0, INT_MAX);
 			break;
 		case 'S':
@@ -570,6 +595,9 @@ main(int argc, char **argv)
 		}
 	}
 
+	if (rts.opt_numeric && force_numeric && !rts.opt_quiet)
+		error(0, 0, _("WARNING: reverse DNS resolution (PTR lookup) disabled, enforce with -H"));
+
 	argc -= optind;
 	argv += optind;
 
@@ -577,14 +605,6 @@ main(int argc, char **argv)
 		error(2, EDESTADDRREQ, "usage error");
 
 	target = argv[argc - 1];
-
-	rts.outpack = malloc(rts.datalen + 28);
-	if (!rts.outpack)
-		error(2, errno, _("memory allocation failed"));
-	if (outpack_fill) {
-		fill(&rts, outpack_fill, rts.outpack, rts.datalen);
-		free(outpack_fill);
-	}
 
 	/* Create sockets */
 	enable_capability_raw();
@@ -626,6 +646,24 @@ main(int argc, char **argv)
 			hints.ai_family = AF_INET;
 	}
 
+	int max_s = MAX(ICMP_MAX_DATALEN, ICMPV6_MAX_DATALEN);
+
+	/* Detect based on -4 / -6 */
+	if (hints.ai_family == AF_INET)
+		max_s = ICMP_MAX_DATALEN - get_ipv4_optlen(&rts);
+	else if (hints.ai_family == AF_INET6)
+		max_s = ICMPV6_MAX_DATALEN;
+
+	/* Force limit on IPv4/IPv6 adresses */
+	if (inet_pton(AF_INET, target, buf))
+		max_s = ICMP_MAX_DATALEN - get_ipv4_optlen(&rts);
+	else if (inet_pton(AF_INET6, target, buf))
+		max_s = ICMPV6_MAX_DATALEN;
+
+	if (rts.datalen > max_s)
+		error(EXIT_FAILURE, 0, "invalid -s value: '%d': out of range: 0 <= value <= %d",
+		      rts.datalen, max_s);
+
 	if (rts.opt_verbose)
 		error(0, 0, "sock4.fd: %d (socktype: %s), sock6.fd: %d (socktype: %s),"
 			   " hints.ai_family: %s\n",
@@ -647,7 +685,6 @@ main(int argc, char **argv)
 	int target_ai_family = hints.ai_family;
 	hints.ai_family = AF_UNSPEC;
 
-	unsigned char buf[sizeof(struct in6_addr)];
 	if (!strchr(target, '%') && sock6.socktype == SOCK_DGRAM &&
 		inet_pton(AF_INET6, target, buf) > 0 &&
 		(IN6_IS_ADDR_LINKLOCAL(buf) || IN6_IS_ADDR_MC_LINKLOCAL(buf))) {
@@ -695,7 +732,6 @@ main(int argc, char **argv)
 	}
 
 	freeaddrinfo(result);
-	free(rts.outpack);
 
 	return ret_val;
 }
@@ -756,6 +792,7 @@ int ping4_run(struct ping_rts *rts, int argc, char **argv, struct addrinfo *ai,
 	unsigned char rspace[3 + 4 * NROUTES + 1];	/* record route space */
 	uint32_t *tmp_rspace;
 	struct sockaddr_in dst;
+	int ret;
 
 	if (argc > 1) {
 		if (rts->opt_rroute)
@@ -949,7 +986,6 @@ int ping4_run(struct ping_rts *rts, int argc, char **argv, struct addrinfo *ai,
 		rspace[1 + IPOPT_OPTVAL] = IPOPT_RR;
 		rspace[1 + IPOPT_OLEN] = sizeof(rspace) - 1;
 		rspace[1 + IPOPT_OFFSET] = IPOPT_MINOFF;
-		rts->optlen = 40;
 		if (setsockopt(sock->fd, IPPROTO_IP, IP_OPTIONS, rspace, sizeof rspace) < 0)
 			error(2, errno, "record route");
 	}
@@ -972,7 +1008,6 @@ int ping4_run(struct ping_rts *rts, int argc, char **argv, struct addrinfo *ai,
 			if (setsockopt(sock->fd, IPPROTO_IP, IP_OPTIONS, rspace, rspace[1]) < 0)
 				error(2, errno, "ts option");
 		}
-		rts->optlen = 40;
 	}
 	if (rts->opt_sourceroute) {
 		int i;
@@ -988,8 +1023,9 @@ int ping4_run(struct ping_rts *rts, int argc, char **argv, struct addrinfo *ai,
 
 		if (setsockopt(sock->fd, IPPROTO_IP, IP_OPTIONS, rspace, 4 + rts->nroute * 4) < 0)
 			error(2, errno, "record route");
-		rts->optlen = 40;
 	}
+
+	rts->optlen = get_ipv4_optlen(rts);
 
 	/* Estimate memory eaten by single packet. It is rough estimate.
 	 * Actually, for small datalen's it depends on kernel side a lot. */
@@ -1025,7 +1061,7 @@ int ping4_run(struct ping_rts *rts, int argc, char **argv, struct addrinfo *ai,
 	printf(_("PING %s (%s) "), rts->hostname, inet_ntoa(rts->whereto.sin_addr));
 	if (rts->device || rts->opt_strictsource)
 		printf(_("from %s %s: "), inet_ntoa(rts->source.sin_addr), rts->device ? rts->device : "");
-	printf(_("%zu(%zu) bytes of data.\n"), rts->datalen, rts->datalen + 8 + rts->optlen + 20);
+	printf(_("%d(%d) bytes of data.\n"), rts->datalen, rts->datalen + 8 + rts->optlen + 20);
 
 	setup(rts, sock);
 	if (rts->opt_connect_sk &&
@@ -1034,10 +1070,10 @@ int ping4_run(struct ping_rts *rts, int argc, char **argv, struct addrinfo *ai,
 
 	drop_capabilities();
 
-	hold = main_loop(rts, &ping4_func_set, sock, packet, packlen);
+	ret = main_loop(rts, &ping4_func_set, sock, packet, packlen);
 	free(packet);
 
-	return hold;
+	return ret;
 }
 
 static void pr_options(struct ping_rts *rts, unsigned char *cp, int hlen)
@@ -1441,7 +1477,7 @@ int ping4_receive_error_msg(struct ping_rts *rts, socket_st *sock)
 		if (rts->opt_flood)
 			write_stdout("E", 1);
 		else if (e->ee_errno != EMSGSIZE)
-			error(0, 0, _("local error: %s"), strerror(e->ee_errno));
+			error(0, e->ee_errno, _("local error"));
 		else
 			error(0, 0, _("local error: message too long, mtu=%u"), e->ee_info);
 		rts->nerrors++;
