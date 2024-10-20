@@ -353,6 +353,7 @@ main(int argc, char **argv)
 		.ni.subject_type = -1,
 	};
 	unsigned char buf[sizeof(struct in6_addr)];
+	struct in6_addr a6;
 
 	/* FIXME: global_rts will be removed in future */
 	global_rts = &rts;
@@ -620,6 +621,14 @@ main(int argc, char **argv)
 		hints.ai_socktype = SOCK_RAW;
 	}
 
+	if (inet_pton(AF_INET6, target, &a6) && IN6_IS_ADDR_V4MAPPED(&a6)) {
+			target = strrchr(target, ':') + 1;
+			hints.ai_family = AF_INET;
+
+			if (rts.opt_verbose)
+				error(0, 0, _("IPv4-Mapped-in-IPv6 address, using IPv4 %s"), target);
+	}
+
 	if (hints.ai_family != AF_INET6) {
 		create_socket(&rts, &sock4, AF_INET, hints.ai_socktype, IPPROTO_ICMP,
 			      hints.ai_family == AF_INET);
@@ -661,12 +670,12 @@ main(int argc, char **argv)
 		max_s = ICMPV6_MAX_DATALEN;
 
 	if (rts.datalen > max_s)
-		error(EXIT_FAILURE, 0, "invalid -s value: '%d': out of range: 0 <= value <= %d",
+		error(EXIT_FAILURE, 0, _("invalid -s value: '%d': out of range: 0 <= value <= %d"),
 		      rts.datalen, max_s);
 
 	if (rts.opt_verbose)
 		error(0, 0, "sock4.fd: %d (socktype: %s), sock6.fd: %d (socktype: %s),"
-			   " hints.ai_family: %s\n",
+			   " hints.ai_family: %s",
 			   sock4.fd, str_socktype(sock4.socktype),
 			   sock6.fd, str_socktype(sock6.socktype),
 			   str_family(hints.ai_family));
@@ -699,7 +708,7 @@ main(int argc, char **argv)
 
 	for (ai = result; ai; ai = ai->ai_next) {
 		if (rts.opt_verbose)
-			printf("ai->ai_family: %s, ai->ai_canonname: '%s'\n",
+			error(0, 0, "ai->ai_family: %s, ai->ai_canonname: '%s'",
 				   str_family(ai->ai_family),
 				   ai->ai_canonname ? ai->ai_canonname : "");
 

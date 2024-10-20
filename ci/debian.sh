@@ -23,9 +23,9 @@ apt install -y --no-install-recommends \
 	gettext \
 	git \
 	iproute2 \
+	jq \
 	libcap-dev \
 	libidn2-0-dev \
-	make \
 	meson \
 	pkg-config \
 	xsltproc
