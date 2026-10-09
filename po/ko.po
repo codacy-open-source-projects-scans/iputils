@@ -6,8 +6,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: iputils\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-09-05 14:28+0200\n"
-"PO-Revision-Date: 2025-09-09 06:55+0000\n"
+"POT-Creation-Date: 2026-08-19 19:59+0200\n"
+"PO-Revision-Date: 2026-08-30 05:18+0000\n"
 "Last-Translator: 김인수 <simmon@nplob.com>\n"
 "Language-Team: Korean <https://translate.fedoraproject.org/projects/iputils/"
 "iputils/ko/>\n"
@@ -16,7 +16,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
-"X-Generator: Weblate 5.13.2\n"
+"X-Generator: Weblate 2026.8.1\n"
 
 #: arping.c:123
 #, c-format
@@ -148,8 +148,8 @@ msgstr "경고: 기본 광역 전송 주소를 사용합니다.\n"
 
 #: arping.c:905 arping.c:908 arping.c:911 ping/ping.c:415 ping/ping.c:465
 #: ping/ping.c:517 ping/ping.c:525 ping/ping.c:569 ping/ping.c:572
-#: ping/ping.c:575 ping/ping.c:588 tracepath.c:474 tracepath.c:477
-#: tracepath.c:480 tracepath.c:502
+#: ping/ping.c:575 ping/ping.c:588 tracepath.c:679 tracepath.c:682
+#: tracepath.c:685 tracepath.c:710
 msgid "invalid argument"
 msgstr "부적절한 인자"
 
@@ -1171,8 +1171,8 @@ msgstr ""
 "  -l <preload>       send <preload> number of packages while waiting "
 "replies\n"
 "  -m <mark>          tag the packets going out\n"
-"  -M <pmtud opt>     define path MTU discovery, can be one of "
-"<do|dont|want|probe>\n"
+"  -M <pmtud opt>     define path MTU discovery, can be one of <do|dont|want|"
+"probe>\n"
 "  -n                 no reverse DNS name resolution, override -H\n"
 "  -O                 report outstanding replies\n"
 "  -p <pattern>       contents of padding byte\n"
@@ -1191,8 +1191,8 @@ msgstr ""
 "  -4                 use IPv4\n"
 "  -b                 allow pinging broadcast\n"
 "  -R                 record route\n"
-"  -T <timestamp>     define timestamp, can be one of "
-"<tsonly|tsandaddr|tsprespec>\n"
+"  -T <timestamp>     define timestamp, can be one of <tsonly|tsandaddr|"
+"tsprespec>\n"
 "\n"
 "IPv6 옵션:\n"
 "  -6                 use IPv6\n"
@@ -1426,7 +1426,32 @@ msgstr "파이프 %d"
 msgid "ipg/ewma %s/%s ms"
 msgstr "ipg/지수가중평균 %s/%s ms"
 
-#: tracepath.c:218
+#: tracepath.c:267
+#, c-format
+msgid "<Malformed interface information extension>\n"
+msgstr "<잘못된 연결장치 정보 확장>\n"
+
+#: tracepath.c:276
+#, c-format
+msgid "Unable to read the ICMP extension header\n"
+msgstr "ICMP 확장 헤더를 읽을 수 없음\n"
+
+#: tracepath.c:282
+#, c-format
+msgid "Invalid extension version\n"
+msgstr "잘못된 확장 버전\n"
+
+#: tracepath.c:295
+#, c-format
+msgid "Invalid object length\n"
+msgstr "잘못된 대상 길이\n"
+
+#: tracepath.c:304
+#, c-format
+msgid "<unknown object class number (%u)>\n"
+msgstr "<알 수 없는 객체 등급 번호 (%u)>\n"
+
+#: tracepath.c:402
 #, c-format
 msgid ""
 "cmsg6:%d\n"
@@ -1435,7 +1460,7 @@ msgstr ""
 "cmsg6:%d\n"
 " "
 
-#: tracepath.c:230
+#: tracepath.c:414
 #, c-format
 msgid ""
 "cmsg4:%d\n"
@@ -1444,55 +1469,60 @@ msgstr ""
 "cmsg4:%d\n"
 " "
 
-#: tracepath.c:235
+#: tracepath.c:419
 #, c-format
 msgid "no info\n"
 msgstr "정보 없음\n"
 
-#: tracepath.c:239
+#: tracepath.c:423
 msgid "[LOCALHOST]"
 msgstr "[로컬호스트]"
 
-#: tracepath.c:287
+#: tracepath.c:471
 #, c-format
 msgid "%3lld.%03ldms "
 msgstr "%3lld.%03ldms "
 
-#: tracepath.c:291
+#: tracepath.c:475
 #, c-format
 msgid "(This broken router returned corrupted payload) "
 msgstr "(이 고장난 라우터는 손상된 전송자료를 반환했습니다) "
 
-#: tracepath.c:306
+#: tracepath.c:493
 #, c-format
 msgid "pmtu %d\n"
 msgstr "pmtu %d\n"
 
-#: tracepath.c:311
+#: tracepath.c:499
 #, c-format
 msgid "reached\n"
 msgstr "도달함\n"
 
-#: tracepath.c:328
+#: tracepath.c:516
 #, c-format
 msgid "asymm %2d "
 msgstr "asymm %2d "
 
-#: tracepath.c:343
+#: tracepath.c:532
 msgid "NET ERROR"
 msgstr "넷 오류"
 
-#: tracepath.c:388
+#: tracepath.c:543
+#, c-format
+msgid "ICMP extension is invalid\n"
+msgstr "ICMP 확장이 잘못되었습니다\n"
+
+#: tracepath.c:592
 #, c-format
 msgid "%2d?: reply received 8)\n"
 msgstr "%2d?: 응답 8 받았습니다)\n"
 
-#: tracepath.c:394
+#: tracepath.c:598
 #, c-format
 msgid "%2d:  send failed\n"
 msgstr "%2d:  전송 실패함\n"
 
-#: tracepath.c:401
+#: tracepath.c:605
 #, c-format
 msgid ""
 "\n"
@@ -1507,6 +1537,7 @@ msgid ""
 "  -m <hops>      use maximum <hops>\n"
 "  -n             no reverse DNS name resolution\n"
 "  -p <port>      use destination <port>\n"
+"  -e             show ICMP extensions (if present)\n"
 "  -V             print version and exit\n"
 "  <destination>  DNS name or IP address\n"
 "\n"
@@ -1524,36 +1555,42 @@ msgstr ""
 "  -m <hops>      최대 <hops>을 사용합니다\n"
 "  -n             역방향 DNS 이름 확인이 없습니다\n"
 "  -p <port>      대상 <port>를 사용합니다\n"
+"  -e             ICMP 확장 표시 (존재하는 경우)\n"
 "  -V             버전을 출력하고 종료합니다\n"
 "  <destination>  DNS 이름 또는 IP 주소\n"
 "\n"
 "보다 자세한 정보를 위하여 tracepath(8)를 참고하세요.\n"
 
-#: tracepath.c:459 tracepath.c:464
+#: tracepath.c:664 tracepath.c:669
 msgid "Only one -4 or -6 option may be specified"
 msgstr "-4 또는 -6 선택은 하나만 지정 할 수 있습니다"
 
-#: tracepath.c:607
+#: tracepath.c:827
 #, c-format
 msgid "%2d:  no reply\n"
 msgstr "%2d:  응답 없음\n"
 
-#: tracepath.c:614
+#: tracepath.c:829
+#, c-format
+msgid "     Too many hops: pmtu %d\n"
+msgstr "     너무 많은 홉: pmtu %d\n"
+
+#: tracepath.c:834
 #, c-format
 msgid "     Resume: pmtu %d "
 msgstr "     재시도: pmtu %d "
 
-#: tracepath.c:616
+#: tracepath.c:836
 #, c-format
 msgid "hops %d "
 msgstr "건너뛰기 %d "
 
-#: tracepath.c:618
+#: tracepath.c:838
 #, c-format
 msgid "back %d "
 msgstr "%d 뒤로 "
 
-#: tracepath.c:623
+#: tracepath.c:843
 #, c-format
 msgid "pktlen must be within: %d < value <= %d"
 msgstr "pktlen은 다음 값 안에 있어야 합니다: %d < 값 <= %d"

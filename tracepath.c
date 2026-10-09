@@ -12,12 +12,14 @@
 #define _GNU_SOURCE
 
 #include <assert.h>
+#include <stddef.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <limits.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <resolv.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,6 +36,8 @@
 #include <linux/errqueue.h>
 #include <linux/icmp.h>
 #include <linux/icmpv6.h>
+#include <linux/in.h>
+#include <linux/in6.h>
 #include <linux/types.h>
 
 #include "iputils_common.h"
@@ -57,6 +61,8 @@ enum {
 	DEFAULT_OVERHEAD_IPV4 = 28,
 	DEFAULT_OVERHEAD_IPV6 = 48,
 
+	MAX_ICMP_MSG_SIZE = 1280,
+
 	DEFAULT_MTU_IPV4 = 65535,
 	DEFAULT_MTU_IPV6 = 128000,
 
@@ -71,8 +77,13 @@ struct hhistory {
 };
 
 struct probehdr {
-	uint32_t ttl;
-	struct timespec ts;
+	union {
+		struct {
+			uint32_t ttl;
+			struct timespec ts;
+		};
+		char buf[MAX_ICMP_MSG_SIZE];
+	};
 };
 
 struct run_state {
@@ -93,8 +104,36 @@ struct run_state {
 	unsigned int
 		no_resolve:1,
 		show_both:1,
-		mapped:1;
+		mapped:1,
+		show_extensions:1;
 };
+
+#ifdef SO_EE_RFC4884_FLAG_INVALID
+enum {
+	ICMP_EXT_OBJ_CLASS_IIO = 2,
+};
+
+/*
+ * RFC 5837: Interface Information Object
+ */
+#define ICMP_EXT_CTYPE_IIO_ROLE(ROLE)	(((ROLE) >> 6) & 0x03)
+#define ICMP_EXT_CTYPE_IIO_MTU		(1U << (0))
+#define ICMP_EXT_CTYPE_IIO_NAME		(1U << (1))
+#define ICMP_EXT_CTYPE_IIO_IPADDR	(1U << (2))
+#define ICMP_EXT_CTYPE_IIO_IFINDEX	(1U << (3))
+
+#ifndef ICMP_AFI_IP
+#define ICMP_AFI_IP	1
+#endif
+#ifndef ICMP_AFI_IP6
+#define ICMP_AFI_IP6	2
+#endif
+
+struct icmp_ext_iio_name_subobj {
+	uint8_t len;
+	char name[];
+};
+#endif
 
 /*
  * All includes, definitions, struct declarations, and global variables are
@@ -127,6 +166,150 @@ static void print_host(struct run_state const *const ctl, char const *const a,
 	printf("%*s", HOST_COLUMN_SIZE - plen, "");
 }
 
+#ifdef SO_EE_RFC4884_FLAG_INVALID
+static inline int get_u16(uint16_t *res, uint8_t *addr, unsigned int *off,
+			   unsigned int len)
+{
+	if (*off + sizeof(*res) > len)
+		return 1;
+	*res = ntohs(*((uint16_t *)(addr + *off)));
+	*off += sizeof(*res);
+	return 0;
+}
+
+static inline int get_u32(uint32_t *res, uint8_t *addr, unsigned int *off,
+			   unsigned int len)
+{
+	if (*off + sizeof(*res) > len)
+		return 1;
+	*res = ntohl(*((uint32_t *)(addr + *off)));
+	*off += sizeof(*res);
+	return 0;
+}
+
+static void print_iio(const struct icmp_extobj_hdr *objh)
+{
+	const char *roles[] = {"inc", "sub", "out", "nxt"};
+	uint16_t obj_len = ntohs(objh->length);
+	uint8_t *pext = (uint8_t *)objh;
+	unsigned int offset = 0;
+
+	printf("     <type=%u: ", objh->class_num);
+	printf("role=%s", roles[ICMP_EXT_CTYPE_IIO_ROLE(objh->class_type)]);
+
+	offset += sizeof(*objh);
+
+	if (objh->class_type & ICMP_EXT_CTYPE_IIO_IFINDEX) {
+		uint32_t ifindex;
+
+		if (get_u32(&ifindex, pext, &offset, obj_len))
+			goto err;
+
+		printf(",ifindex=%u", ifindex);
+	}
+	if (objh->class_type & ICMP_EXT_CTYPE_IIO_IPADDR) {
+		char ipaddr[INET6_ADDRSTRLEN] = "";
+		uint16_t afi, reserved;
+		size_t addr_size;
+		int af;
+
+		if (get_u16(&afi, pext, &offset, obj_len) ||
+		    get_u16(&reserved, pext, &offset, obj_len))
+			goto err;
+
+		switch (afi) {
+		case ICMP_AFI_IP:
+			af = AF_INET;
+			addr_size = sizeof(struct in_addr);
+			break;
+		case ICMP_AFI_IP6:
+			af = AF_INET6;
+			addr_size = sizeof(struct in6_addr);
+			break;
+		default:
+			goto err;
+		}
+
+		if (offset + addr_size > obj_len)
+			goto err;
+
+		inet_ntop(af, pext + offset, ipaddr, sizeof(ipaddr));
+		printf(",ip=%s", ipaddr);
+		offset += addr_size;
+	}
+	if (objh->class_type & ICMP_EXT_CTYPE_IIO_NAME) {
+		struct icmp_ext_iio_name_subobj *name_subobj;
+
+		if (offset + sizeof(uint8_t) > obj_len)
+			goto err;
+
+		name_subobj =
+			(struct icmp_ext_iio_name_subobj *)(pext + offset);
+		if (offset + name_subobj->len > obj_len)
+			goto err;
+
+		printf(",name=%.*s", name_subobj->len, name_subobj->name);
+		offset += name_subobj->len;
+	}
+	if (objh->class_type & ICMP_EXT_CTYPE_IIO_MTU) {
+		uint32_t mtu;
+
+		if (get_u32(&mtu, pext, &offset, obj_len))
+			goto err;
+
+		printf(",mtu=%u", mtu);
+	}
+
+	printf(">\n");
+	return;
+
+err:
+	printf(_("<Malformed interface information extension>\n"));
+}
+
+static void print_extension(const char *buf, unsigned int recv_size,
+			    unsigned int offset)
+{
+	const struct icmp_ext_hdr *hdr;
+
+	if (offset + sizeof(*hdr) > recv_size) {
+		printf(_("Unable to read the ICMP extension header\n"));
+		return;
+	}
+
+	hdr = (const struct icmp_ext_hdr *) &buf[offset];
+	if (hdr->version != 2) {
+		printf(_("Invalid extension version\n"));
+		return;
+	}
+
+	offset += sizeof(*hdr);
+	while (offset + sizeof(struct icmp_extobj_hdr) <= recv_size) {
+		const struct icmp_extobj_hdr *objh;
+		uint16_t obj_len;
+
+		objh = (const struct icmp_extobj_hdr *) &buf[offset];
+		obj_len = ntohs(objh->length);
+
+		if (obj_len + offset > recv_size || obj_len < sizeof(*objh)) {
+			printf(_("Invalid object length\n"));
+			return;
+		}
+
+		switch (objh->class_num) {
+		case ICMP_EXT_OBJ_CLASS_IIO:
+			print_iio(objh);
+			break;
+		default:
+			printf(_("<unknown object class number (%u)>\n"),
+			       objh->class_num);
+			break;
+		}
+		offset += obj_len;
+	}
+}
+#endif
+
 static int recverr(struct run_state *const ctl)
 {
 	ssize_t recv_size;
@@ -157,6 +340,7 @@ static int recverr(struct run_state *const ctl)
 		.msg_controllen = sizeof(cbuf),
 		0
 	};
+	bool restart;
 
  restart:
 	memset(&rcvbuf, -1, sizeof(rcvbuf));
@@ -192,7 +376,7 @@ static int recverr(struct run_state *const ctl)
 		retts = &ctl->his[slot].sendtime;
 		ctl->his[slot].hops = 0;
 	}
-	if (recv_size == sizeof(rcvbuf)) {
+	if (recv_size >= (ssize_t)(offsetof(struct probehdr, ts) + sizeof(rcvbuf.ts))) {
 		if (rcvbuf.ttl == 0 || (rcvbuf.ts.tv_sec == 0 && rcvbuf.ts.tv_nsec == 0))
 			broken_router = 1;
 		else {
@@ -298,23 +482,27 @@ static int recverr(struct run_state *const ctl)
 	else
 		rethops = 256 - rethops;
 
+	restart = false;
+
 	switch (e->ee_errno) {
 	case ETIMEDOUT:
 		printf("\n");
+		restart = true;
 		break;
 	case EMSGSIZE:
 		printf(_("pmtu %d\n"), e->ee_info);
 		ctl->mtu = e->ee_info;
 		progress = ctl->mtu;
+		restart = true;
 		break;
 	case ECONNREFUSED:
 		printf(_("reached\n"));
 		ctl->hops_to = sndhops < 0 ? ctl->ttl : sndhops;
 		ctl->hops_from = rethops;
-		return 0;
+		break;
 	case EPROTO:
 		printf("!P\n");
-		return 0;
+		break;
 	case EHOSTUNREACH:
 		if ((e->ee_origin == SO_EE_ORIGIN_ICMP &&
 		     e->ee_type == ICMP_TIME_EXCEEDED &&
@@ -328,22 +516,38 @@ static int recverr(struct run_state *const ctl)
 					printf(_("asymm %2d "), rethops);
 			}
 			printf("\n");
+			restart = true;
 			break;
 		}
 		printf("!H\n");
-		return 0;
+		break;
 	case ENETUNREACH:
 		printf("!N\n");
-		return 0;
+		break;
 	case EACCES:
 		printf("!A\n");
-		return 0;
+		break;
 	default:
 		printf("\n");
 		error(0, e->ee_errno, _("NET ERROR"));
-		return 0;
+		break;
 	}
-	goto restart;
+
+	if (ctl->show_extensions) {
+#ifdef SO_EE_RFC4884_FLAG_INVALID
+		if (!(e->ee_rfc4884.flags & SO_EE_RFC4884_FLAG_INVALID)) {
+			if (e->ee_rfc4884.len)
+				print_extension(rcvbuf.buf, recv_size,
+						e->ee_rfc4884.len);
+		} else {
+			printf(_("ICMP extension is invalid\n"));
+		}
+#endif
+	}
+
+	if (restart)
+		goto restart;
+	return 0;
 }
 
 static int probe_ttl(struct run_state *const ctl)
@@ -408,6 +612,7 @@ static void usage(void)
 		"  -m <hops>      use maximum <hops>\n"
 		"  -n             no reverse DNS name resolution\n"
 		"  -p <port>      use destination <port>\n"
+		"  -e             show ICMP extensions (if present)\n"
 		"  -V             print version and exit\n"
 		"  <destination>  DNS name or IP address\n"
 		"\nFor more details see tracepath(8).\n"));
@@ -452,7 +657,7 @@ int main(int argc, char **argv)
 	else if (argv[0][strlen(argv[0]) - 1] == '6')
 		hints.ai_family = AF_INET6;
 
-	while ((ch = getopt(argc, argv, "46nbh?l:m:p:V")) != EOF) {
+	while ((ch = getopt(argc, argv, "46nbh?l:m:p:eV")) != EOF) {
 		switch (ch) {
 		case '4':
 			if (hints.ai_family == AF_INET6)
@@ -478,6 +683,9 @@ int main(int argc, char **argv)
 			break;
 		case 'p':
 			ctl.base_port = strtol_or_err(optarg, _("invalid argument"), 0, UINT16_MAX);
+			break;
+		case 'e':
+			ctl.show_extensions = 1;
 			break;
 		case 'V':
 			printf(IPUTILS_VERSION("tracepath"));
@@ -539,6 +747,12 @@ int main(int argc, char **argv)
 		     IPV6_MTU_DISCOVER, &on, sizeof(on))))
 			error(1, errno, "IPV6_MTU_DISCOVER");
 		on = 1;
+#ifdef IPV6_RECVERR_RFC4884
+		if (ctl.show_extensions &&
+		    setsockopt(ctl.socket_fd, SOL_IPV6, IPV6_RECVERR_RFC4884,
+			       &on, sizeof(on)))
+			error(1, errno, "IPV6_RECVERR_RFC4884");
+#endif
 		if (setsockopt(ctl.socket_fd, SOL_IPV6, IPV6_RECVERR, &on, sizeof(on)))
 			error(1, errno, "IPV6_RECVERR");
 		if (setsockopt(ctl.socket_fd, SOL_IPV6, IPV6_HOPLIMIT, &on, sizeof(on))
@@ -562,6 +776,12 @@ int main(int argc, char **argv)
 		if (setsockopt(ctl.socket_fd, SOL_IP, IP_MTU_DISCOVER, &on, sizeof(on)))
 			error(1, errno, "IP_MTU_DISCOVER");
 		on = 1;
+#ifdef IP_RECVERR_RFC4884
+		if (ctl.show_extensions &&
+		    setsockopt(ctl.socket_fd, SOL_IP, IP_RECVERR_RFC4884, &on,
+			       sizeof(on)))
+			error(1, errno, "IP_RECVERR_RFC4884");
+#endif
 		if (setsockopt(ctl.socket_fd, SOL_IP, IP_RECVERR, &on, sizeof(on)))
 			error(1, errno, "IP_RECVERR");
 		if (setsockopt(ctl.socket_fd, SOL_IP, IP_RECVTTL, &on, sizeof(on)))
@@ -606,7 +826,7 @@ int main(int argc, char **argv)
 		if (res < 0)
 			printf(_("%2d:  no reply\n"), ctl.ttl);
 	}
-	printf("     Too many hops: pmtu %d\n", ctl.mtu);
+	printf(_("     Too many hops: pmtu %d\n"), ctl.mtu);
 
  done:
 	freeaddrinfo(result);
